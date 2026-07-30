@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { findSelf, myChampionId, rankedEntry } from '../src/riot/presence.mjs';
 import { buildActivity, resolveDisplayRank, clamp } from '../src/activity.mjs';
-import { Catalog, buildRanks } from '../src/leagueData.mjs';
+import { Catalog, buildRanks, regaliaUrl, gameAssetUrl } from '../src/leagueData.mjs';
 import { createTranslator, localizeRankName, setLanguage, m } from '../src/i18n.mjs';
 import { isValidClientId } from '../src/config.mjs';
 
@@ -19,10 +19,11 @@ const catalog = new Catalog({
   champions: [
     // Deliberately out of order, and with the alternate-mode copy of Ahri that
     // Data Dragon ships under the same display name.
-    { key: 60103, id: 'Jade_Ahri', name: 'Ahri' },
-    { key: 103, id: 'Ahri', name: 'Ahri' },
-    { key: 62, id: 'MonkeyKing', name: 'Wukong' },
-    { key: 145, id: 'Kaisa', name: "Kai'Sa" },
+    { key: 60103, id: 'Jade_Ahri', name: 'Ahri', tile: 'jade_ahri_tile.jpg' },
+    { key: 103, id: 'Ahri', name: 'Ahri', tile: 'ahri_tile.jpg' },
+    { key: 62, id: 'MonkeyKing', name: 'Wukong', tile: 'monkeyking_tile.jpg' },
+    // No tile indexed, which is how a champion added mid-patch arrives.
+    { key: 145, id: 'Kaisa', name: "Kai'Sa", tile: '' },
   ],
 });
 
@@ -181,10 +182,36 @@ test('catalog: champions resolve by id and by display name', () => {
   // The scoreboard reports display names, which are not the asset names.
   assert.equal(catalog.champion('Wukong').id, 'MonkeyKing');
   assert.equal(catalog.champion("Kai'Sa").id, 'Kaisa');
-  assert.match(catalog.champion(103).splash, /\/Ahri_0\.jpg$/);
+  assert.equal(catalog.champion(103).tile, 'ahri_tile.jpg');
   assert.equal(catalog.champion(0), null);
   assert.equal(catalog.champion(''), null);
   assert.equal(catalog.champion('Nobody'), null);
+});
+
+test('catalog: a champion with no tile falls back to its square icon', () => {
+  const kaisa = catalog.champion(145);
+  assert.match(kaisa.icon, /\/img\/champion\/Kaisa\.png$/);
+  assert.equal(kaisa.tile, kaisa.icon);
+});
+
+test('catalog: crests are square, tightly framed and complete', () => {
+  // The client's own ranked-emblem set is 16:9 with the crest floating in the
+  // middle, and its mini crests have no Emerald at all.
+  assert.equal(
+    regaliaUrl('15.1.1', 'GOLD II'),
+    'https://ddragon.leagueoflegends.com/cdn/15.1.1/img/tft-regalia/TFT_Regalia_Gold.png',
+  );
+  assert.match(regaliaUrl('15.1.1', 'EMERALD IV'), /TFT_Regalia_Emerald\.png$/);
+  // The two file names that are not simply the tier in title case.
+  assert.match(regaliaUrl('15.1.1', 'UNRANKED'), /TFT_Regalia_Provisional\.png$/);
+  assert.match(regaliaUrl('15.1.1', 'GRANDMASTER'), /TFT_Regalia_GrandMaster\.png$/);
+});
+
+test('catalog: client asset paths map onto Community Dragon', () => {
+  assert.equal(
+    gameAssetUrl('/lol-game-data/assets/ASSETS/Characters/XinZhao/Skins/Base/Images/XinZhaoRework_splash_tile_0.jpg'),
+    'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/characters/xinzhao/skins/base/images/xinzhaorework_splash_tile_0.jpg',
+  );
 });
 
 test('catalog: an alternate-mode copy never shadows the champion', () => {
@@ -202,7 +229,7 @@ test('rank: override replaces the real tier', () => {
 
   const rank = resolveDisplayRank(inGame, config, catalog, 'en');
   assert.equal(rank.label, 'Challenger');
-  assert.match(rank.icon, /emblem-challenger\.png$/);
+  assert.match(rank.icon, /TFT_Regalia_Challenger\.png$/);
 });
 
 test('rank: real mode reads the queue config asks for', () => {
@@ -265,8 +292,8 @@ test('activity: in game shows queue, champion and the scoreboard', () => {
 
   assert.equal(activity.details, 'Ranked Solo/Duo — Ahri');
   assert.equal(activity.state, '9 / 2 / 14 • 178 CS');
-  assert.match(activity.assets.large_image, /Ahri_0\.jpg$/);
-  assert.match(activity.assets.small_image, /emblem-gold\.png$/);
+  assert.equal(activity.assets.large_image, 'ahri_tile.jpg');
+  assert.match(activity.assets.small_image, /TFT_Regalia_Gold\.png$/);
   assert.equal(activity.timestamps.start, 1000);
 });
 
@@ -375,7 +402,7 @@ test('activity: largeImage "rank" drops the redundant small badge', () => {
     startedAt: 1,
   });
 
-  assert.match(activity.assets.large_image, /emblem-gold\.png$/);
+  assert.match(activity.assets.large_image, /TFT_Regalia_Gold\.png$/);
   assert.equal(activity.assets.small_image, undefined);
 });
 

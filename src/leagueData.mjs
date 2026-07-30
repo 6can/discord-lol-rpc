@@ -7,10 +7,12 @@ import { m, localizeRankName } from './i18n.mjs';
 const CACHE_DIR = path.join(ROOT, '.cache');
 const CACHE_FILE = path.join(CACHE_DIR, 'catalog.json');
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Bumped when the shape of the cached catalog changes, to discard old ones. */
+const CACHE_VERSION = 2;
 
 const DDRAGON = 'https://ddragon.leagueoflegends.com';
-const EMBLEMS =
-  'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images';
+const GAME_DATA =
+  'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default';
 
 /** Tiers that are split into four divisions, from the bottom up. */
 const DIVISIONAL = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND'];
@@ -53,19 +55,45 @@ function rankKey(value) {
  * of the catalog is complete on its own.
  */
 function buildRanks() {
-  const emblem = (tier) => `${EMBLEMS}/ranked-emblem/emblem-${tier.toLowerCase()}.png`;
-  // Unranked has no emblem of its own, only the flat crest used in lobbies.
-  const ranks = [{ tier: 0, name: 'UNRANKED', icon: `${EMBLEMS}/ranked-mini-crests/unranked.png` }];
+  const ranks = [{ tier: 0, name: 'UNRANKED' }];
 
   for (const tier of DIVISIONAL) {
     for (const division of DIVISIONS) {
-      ranks.push({ tier: ranks.length, name: `${tier} ${division}`, icon: emblem(tier) });
+      ranks.push({ tier: ranks.length, name: `${tier} ${division}` });
     }
   }
   for (const tier of APEX) {
-    ranks.push({ tier: ranks.length, name: tier, icon: emblem(tier) });
+    ranks.push({ tier: ranks.length, name: tier });
   }
   return ranks;
+}
+
+/** The two tiers whose file name is not just the tier in title case. */
+const REGALIA_FILES = { UNRANKED: 'Provisional', GRANDMASTER: 'GrandMaster' };
+
+/**
+ * The crest for a tier.
+ *
+ * Data Dragon's tft-regalia set is used rather than the client's own
+ * ranked-emblem images, and despite the name it is the same League crest art.
+ * What differs is the framing: the client images are 1280x720 with the crest
+ * floating in the middle at about a tenth of the width, so once Discord fits
+ * one into a badge there is almost nothing left to see. These are square and
+ * tightly cropped, and unlike the client's mini crests the set is complete —
+ * that one is missing Emerald entirely.
+ */
+function regaliaUrl(version, rankName) {
+  const tier = String(rankName).split(/\s+/)[0].toUpperCase();
+  const file = REGALIA_FILES[tier] ?? tier.charAt(0) + tier.slice(1).toLowerCase();
+  return `${DDRAGON}/cdn/${version}/img/tft-regalia/TFT_Regalia_${file}.png`;
+}
+
+/**
+ * Riot writes asset paths as they look inside the client; Community Dragon
+ * serves the same files lowercased under its own root.
+ */
+function gameAssetUrl(assetPath) {
+  return `${GAME_DATA}${String(assetPath).replace(/^\/lol-game-data\/assets/i, '').toLowerCase()}`;
 }
 
 async function getJson(url) {
@@ -78,24 +106,35 @@ async function downloadCatalog() {
   // Data Dragon is versioned per patch and the newest one is first.
   const versions = await getJson(`${DDRAGON}/api/versions.json`);
   const version = versions[0];
-  const champions = await getJson(`${DDRAGON}/cdn/${version}/data/en_US/champion.json`);
+
+  const [champions, skins] = await Promise.all([
+    getJson(`${DDRAGON}/cdn/${version}/data/en_US/champion.json`),
+    // Where the square tile art lives. The file names behind it are irregular
+    // enough that guessing them is not an option — a reworked champion keeps
+    // the old name ("XinZhaoRework"), and a recent one sits under Skin0 rather
+    // than Base — so the only reliable source is Riot's own index.
+    getJson(`${GAME_DATA}/v1/skins.json`),
+  ]);
 
   return {
+    cacheVersion: CACHE_VERSION,
     fetchedAt: Date.now(),
     version,
     ranks: buildRanks(),
-    // Only the identifiers are kept; every image URL is derived from them.
-    champions: Object.values(champions.data).map((c) => ({
-      key: Number(c.key),
-      id: c.id,
-      name: c.name,
-    })),
+    champions: Object.values(champions.data).map((c) => {
+      const key = Number(c.key);
+      // A champion's base skin is its key followed by three zeroes.
+      const tilePath = skins[String(key * 1000)]?.tilePath;
+      return { key, id: c.id, name: c.name, tile: tilePath ? gameAssetUrl(tilePath) : '' };
+    }),
   };
 }
 
 function readCache() {
   try {
-    return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+    const cached = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+    // A cache written by an older layout is dropped rather than patched.
+    return cached?.cacheVersion === CACHE_VERSION ? cached : null;
   } catch {
     return null;
   }
@@ -160,7 +199,8 @@ class Catalog {
   }
 
   rank(tier) {
-    return this.ranksByTier.get(Number(tier)) ?? null;
+    const found = this.ranksByTier.get(Number(tier));
+    return found ? { ...found, icon: regaliaUrl(this.version, found.name) } : null;
   }
 
   /** Accepts either a numeric champion id (103) or a display name ("Ahri"). */
@@ -173,13 +213,16 @@ class Catalog {
         : this.championsByName.get(normalizeKey(value));
     if (!found) return null;
 
+    const icon = `${DDRAGON}/cdn/${this.version}/img/champion/${found.id}.png`;
     return {
       key: found.key,
       id: found.id,
       name: found.name,
-      icon: `${DDRAGON}/cdn/${this.version}/img/champion/${found.id}.png`,
-      // Splash art is the one Data Dragon asset that is not patch-versioned.
-      splash: `${DDRAGON}/cdn/img/champion/splash/${found.id}_0.jpg`,
+      icon,
+      // The tile is square and cropped close, which is what a card wants;
+      // splash art is 16:9 and letterboxes into something distant. The icon
+      // stands in when a champion is too new to have one indexed yet.
+      tile: found.tile || icon,
     };
   }
 
@@ -239,4 +282,4 @@ class Catalog {
   }
 }
 
-export { normalizeKey, rankKey, buildRanks, Catalog };
+export { normalizeKey, rankKey, buildRanks, regaliaUrl, gameAssetUrl, Catalog };

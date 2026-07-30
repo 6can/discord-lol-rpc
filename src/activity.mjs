@@ -190,7 +190,7 @@ export function buildActivity({ presence, catalog, config, t, startedAt }) {
     largeImage = rank.icon;
     largeText = rank.label;
   } else if (showChampionLarge) {
-    largeImage = champion.splash;
+    largeImage = champion.tile;
     largeText = champion.name;
   } else if (iconUrl) {
     largeImage = iconUrl;
