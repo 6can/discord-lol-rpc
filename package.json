@@ -1,0 +1,40 @@
+{
+  "name": "discord-lol-rpc",
+  "version": "1.0.0",
+  "description": "Dependency-free Discord Rich Presence for League of Legends, with a rank you choose yourself",
+  "type": "module",
+  "main": "src/index.mjs",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "setup": "node src/index.mjs --setup",
+    "ranks": "node src/index.mjs --list-ranks",
+    "doctor": "node src/index.mjs --doctor",
+    "demo": "node src/index.mjs --demo",
+    "debug": "node src/index.mjs --debug",
+    "test": "node --test"
+  },
+  "keywords": [
+    "league-of-legends",
+    "lol",
+    "discord",
+    "discord-rpc",
+    "rich-presence",
+    "rpc"
+  ],
+  "author": "6can",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/6can/discord-lol-rpc.git"
+  },
+  "homepage": "https://github.com/6can/discord-lol-rpc#readme",
+  "bugs": {
+    "url": "https://github.com/6can/discord-lol-rpc/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "win32"
+  ]
+}

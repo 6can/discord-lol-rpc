@@ -1,0 +1,29 @@
+{
+  "discordClientId": "",
+
+  "language": "en",
+  "pollIntervalMs": 3000,
+  "leaguePath": "",
+
+  "rank": {
+    "mode": "real",
+    "override": "Challenger",
+    "leaguePoints": 0,
+    "queue": "solo"
+  },
+
+  "display": {
+    "showKda": true,
+    "showParty": true,
+    "showLevel": false,
+    "showRankInMenus": true,
+    "showRankInText": false,
+    "largeImage": "champion",
+    "buttons": []
+  },
+
+  "idle": {
+    "showWhenGameClosed": false,
+    "text": "League closed"
+  }
+}
