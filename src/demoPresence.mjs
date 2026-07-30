@@ -34,6 +34,9 @@ const SCENES = [
 
 const BASE = {
   championName: '',
+  // Foxfire Ahri, so the demo shows the skin art rather than the default.
+  skinId: 0,
+  skinNumber: 0,
   ranked: {
     solo: { tier: 'GOLD', division: 'II', leaguePoints: 45 },
     flex: { tier: 'SILVER', division: 'I', leaguePoints: 12 },
@@ -63,6 +66,9 @@ export function nextDemoPresence({ holdTicks = 4 } = {}) {
     // Only a running match reports a scoreboard, so only that scene gets one.
     liveData: scene.phase === 'InProgress',
     championName: scene.phase === 'InProgress' ? 'Ahri' : '',
+    // Champion select knows the absolute id, the scoreboard the number.
+    skinId: scene.phase === 'ChampSelect' ? 103003 : 0,
+    skinNumber: scene.phase === 'InProgress' ? 3 : 0,
     kills: inGameTicks * 3,
     deaths: inGameTicks,
     assists: inGameTicks * 2,

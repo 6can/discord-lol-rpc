@@ -6,13 +6,14 @@ const IN_GAME_PHASES = new Set(['GameStart', 'InProgress', 'Reconnect']);
 const LOBBY_PHASES = new Set(['None', 'Lobby', 'Matchmaking', 'ReadyCheck']);
 
 /**
- * The one thing the client will not tell us mid-game: which champion we picked.
- * Champion select is gone by then, and the Live Client Data API is not up until
- * the match window is. Remembering the pick covers the gap, and the live data
- * takes over as soon as it exists — which is also what makes a mid-game start
- * work at all.
+ * The one thing the client will not tell us mid-game: what we picked. Champion
+ * select is gone by then, and the Live Client Data API is not up until the
+ * match window is. Remembering the pick covers the gap, and the live data takes
+ * over as soon as it exists — which is also what makes a mid-game start work
+ * at all.
  */
 let lastChampionId = 0;
+let lastSkinId = 0;
 
 /** The summoner never changes while the client runs, so it is read once. */
 let cachedSummoner = null;
@@ -20,6 +21,7 @@ let cachedSummoner = null;
 export function resetSessionCache() {
   cachedSummoner = null;
   lastChampionId = 0;
+  lastSkinId = 0;
 }
 
 /** Solo and flex are read separately so config decides which one is shown. */
@@ -56,11 +58,15 @@ function findSelf(live) {
   );
 }
 
-function myChampionId(champSelect) {
+/** Our own row in champion select: what we are on, and in which skin. */
+function myPick(champSelect) {
   const me = champSelect?.myTeam?.find((p) => p.cellId === champSelect.localPlayerCellId);
-  // Before locking in, only the intent is set — which is what the client shows
-  // to everyone else too.
-  return Number(me?.championId) || Number(me?.championPickIntent) || 0;
+  return {
+    // Before locking in, only the intent is set — which is what the client
+    // shows to everyone else too.
+    championId: Number(me?.championId) || Number(me?.championPickIntent) || 0,
+    skinId: Number(me?.selectedSkinId) || 0,
+  };
 }
 
 /**
@@ -88,10 +94,13 @@ export async function fetchLeaguePresence() {
   ]);
 
   if (champSelect) {
-    const picked = myChampionId(champSelect);
-    if (picked) lastChampionId = picked;
+    const pick = myPick(champSelect);
+    if (pick.championId) lastChampionId = pick.championId;
+    // Assigned either way, so going back to the default skin is picked up too.
+    lastSkinId = pick.skinId;
   } else if (!inGame) {
     lastChampionId = 0;
+    lastSkinId = 0;
   }
 
   const me = findSelf(live);
@@ -107,6 +116,11 @@ export async function fetchLeaguePresence() {
 
     championId: lastChampionId,
     championName: me?.championName ?? '',
+    // Champion select gives an absolute skin id; the scoreboard gives a number
+    // against the champion. Both are passed on, since which one exists depends
+    // on where in the game we are.
+    skinId: lastSkinId,
+    skinNumber: Number(me?.skinID ?? me?.skinId) || 0,
 
     partySize: Array.isArray(lobby?.members) ? lobby.members.length : 0,
     maxPartySize: Number(lobby?.gameConfig?.maxLobbySize) || 0,
@@ -132,4 +146,4 @@ export async function fetchLeaguePresence() {
   };
 }
 
-export { findSelf, myChampionId, rankedEntry };
+export { findSelf, myPick, rankedEntry };

@@ -59,9 +59,10 @@ That's it. Re-run the wizard any time with `npm run setup`.
 | Champion select | `Champion Select` · `Ranked Solo/Duo — Ahri` |
 | In a game | `Ranked Solo/Duo — Ahri` · `9 / 2 / 14 • 178 CS` |
 
-The champion's tile art is the large image, your rank crest the small one, and
-the timer counts the match — not how long this has been running, so it is still
-right if you start it mid-game.
+The large image is the champion's tile art — in the skin you are actually
+playing, picked up from champion select or from the game itself — your rank
+crest is the small one, and the timer counts the match rather than how long
+this has been running, so it is still right if you start it mid-game.
 
 ## Changing the rank
 
@@ -210,7 +211,7 @@ game itself serves on port 2999.
 
 Rank crests and profile icons come from
 [Data Dragon](https://developer.riotgames.com/docs/lol#data-dragon), champion
-tiles from [Community Dragon](https://communitydragon.org), fetched once a week
+and skin tiles from [Community Dragon](https://communitydragon.org), fetched once a week
 and cached to disk so it also works offline. Both are picked for shape: Discord
 fits a card image into a square, so anything 16:9 comes out small and far away.
 Nothing else leaves your machine: no Riot login, no credentials, no game files

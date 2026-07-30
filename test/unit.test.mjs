@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { findSelf, myChampionId, rankedEntry } from '../src/riot/presence.mjs';
-import { buildActivity, resolveDisplayRank, clamp } from '../src/activity.mjs';
+import { findSelf, myPick, rankedEntry } from '../src/riot/presence.mjs';
+import { buildActivity, resolveDisplayRank, resolveSkin, clamp } from '../src/activity.mjs';
 import { Catalog, buildRanks, regaliaUrl, gameAssetUrl } from '../src/leagueData.mjs';
 import { createTranslator, localizeRankName, setLanguage, m } from '../src/i18n.mjs';
 import { isValidClientId } from '../src/config.mjs';
@@ -25,6 +25,11 @@ const catalog = new Catalog({
     // No tile indexed, which is how a champion added mid-patch arrives.
     { key: 145, id: 'Kaisa', name: "Kai'Sa", tile: '' },
   ],
+  // Default skins are deliberately absent — the champion carries that art.
+  skins: {
+    103003: { name: 'Foxfire Ahri', tile: 'foxfire_ahri_tile.jpg' },
+    62001: { name: 'Volcanic Wukong', tile: 'volcanic_wukong_tile.jpg' },
+  },
 });
 
 const baseConfig = () => ({
@@ -67,6 +72,8 @@ const inGame = {
   creepScore: 178,
   liveData: true,
   gameTimeMs: 900000,
+  skinId: 0,
+  skinNumber: 0,
 };
 
 const inMenus = {
@@ -112,19 +119,19 @@ test('presence: the locked champion wins over the intent', () => {
   const session = {
     localPlayerCellId: 2,
     myTeam: [
-      { cellId: 1, championId: 62, championPickIntent: 0 },
-      { cellId: 2, championId: 103, championPickIntent: 145 },
+      { cellId: 1, championId: 62, championPickIntent: 0, selectedSkinId: 62001 },
+      { cellId: 2, championId: 103, championPickIntent: 145, selectedSkinId: 103003 },
     ],
   };
-  assert.equal(myChampionId(session), 103);
+  assert.deepEqual(myPick(session), { championId: 103, skinId: 103003 });
 
   // Before locking in, only the intent is set.
   session.myTeam[1].championId = 0;
-  assert.equal(myChampionId(session), 145);
+  assert.equal(myPick(session).championId, 145);
 
   session.myTeam[1].championPickIntent = 0;
-  assert.equal(myChampionId(session), 0);
-  assert.equal(myChampionId(null), 0);
+  assert.equal(myPick(session).championId, 0);
+  assert.deepEqual(myPick(null), { championId: 0, skinId: 0 });
 });
 
 test('presence: ranked entries are read per queue', () => {
@@ -205,6 +212,26 @@ test('catalog: crests are square, tightly framed and complete', () => {
   // The two file names that are not simply the tier in title case.
   assert.match(regaliaUrl('15.1.1', 'UNRANKED'), /TFT_Regalia_Provisional\.png$/);
   assert.match(regaliaUrl('15.1.1', 'GRANDMASTER'), /TFT_Regalia_GrandMaster\.png$/);
+});
+
+test('skin: either source lands on the same art', () => {
+  const ahri = catalog.champion(103);
+
+  // Champion select reports the absolute id.
+  assert.equal(resolveSkin({ skinId: 103003, skinNumber: 0 }, ahri, catalog).name, 'Foxfire Ahri');
+  // The scoreboard reports a number against the champion, which is all there
+  // is to go on when the app is started with a game already running.
+  assert.equal(resolveSkin({ skinId: 0, skinNumber: 3 }, ahri, catalog).name, 'Foxfire Ahri');
+});
+
+test('skin: the default one is not in the index', () => {
+  const ahri = catalog.champion(103);
+  assert.equal(resolveSkin({ skinId: 0, skinNumber: 0 }, ahri, catalog), null);
+  assert.equal(resolveSkin({ skinId: 103000, skinNumber: 0 }, ahri, catalog), null);
+  // An unowned or brand new skin is simply unknown, not an error.
+  assert.equal(resolveSkin({ skinId: 0, skinNumber: 99 }, ahri, catalog), null);
+  assert.equal(resolveSkin({}, ahri, catalog), null);
+  assert.equal(resolveSkin({ skinNumber: 3 }, null, catalog), null);
 });
 
 test('catalog: client asset paths map onto Community Dragon', () => {
@@ -293,8 +320,37 @@ test('activity: in game shows queue, champion and the scoreboard', () => {
   assert.equal(activity.details, 'Ranked Solo/Duo — Ahri');
   assert.equal(activity.state, '9 / 2 / 14 • 178 CS');
   assert.equal(activity.assets.large_image, 'ahri_tile.jpg');
+  assert.equal(activity.assets.large_text, 'Ahri');
   assert.match(activity.assets.small_image, /TFT_Regalia_Gold\.png$/);
   assert.equal(activity.timestamps.start, 1000);
+});
+
+test('activity: the art follows the skin, the text stays on the champion', () => {
+  const activity = buildActivity({
+    presence: { ...inGame, skinNumber: 3 },
+    catalog,
+    config: baseConfig(),
+    t: createTranslator('en'),
+    startedAt: 1,
+  });
+
+  assert.equal(activity.assets.large_image, 'foxfire_ahri_tile.jpg');
+  assert.equal(activity.assets.large_text, 'Foxfire Ahri');
+  // A teammate reading the card wants the champion, not the wardrobe.
+  assert.equal(activity.details, 'Ranked Solo/Duo — Ahri');
+});
+
+test('activity: champion select shows the skin picked there', () => {
+  const activity = buildActivity({
+    presence: { ...inMenus, phase: 'ChampSelect', queueId: 420, championId: 62, skinId: 62001 },
+    catalog,
+    config: baseConfig(),
+    t: createTranslator('en'),
+    startedAt: 1,
+  });
+
+  assert.equal(activity.assets.large_image, 'volcanic_wukong_tile.jpg');
+  assert.equal(activity.state, 'Ranked Solo/Duo — Wukong');
 });
 
 test('activity: the scoreboard needs live data', () => {

@@ -13,7 +13,7 @@ const MESSAGES = {
     'config.badRankQueue': 'rank.queue "{0}" is not valid, falling back to "solo".',
 
     'catalog.fromCache': 'Catalog loaded from cache.',
-    'catalog.updated': 'Catalog updated (patch {0}, {1} champions).',
+    'catalog.updated': 'Catalog updated (patch {0}, {1} champions, {2} skins).',
     'catalog.writeFailed': 'Could not write the catalog cache: {0}',
     'catalog.offline': 'ddragon.leagueoflegends.com is unreachable ({0}), using the cached catalog.',
     'catalog.unavailable': 'Catalog download failed and no cache exists: {0}',
@@ -106,7 +106,7 @@ const MESSAGES = {
     'config.badRankQueue': 'rank.queue "{0}" gecersiz, "solo" kullaniliyor.',
 
     'catalog.fromCache': 'Katalog onbellekten yuklendi.',
-    'catalog.updated': 'Katalog guncellendi ({0} yamasi, {1} sampiyon).',
+    'catalog.updated': 'Katalog guncellendi ({0} yamasi, {1} sampiyon, {2} kostum).',
     'catalog.writeFailed': 'Katalog onbellege yazilamadi: {0}',
     'catalog.offline': "ddragon.leagueoflegends.com'a ulasilamadi ({0}), onbellek kullaniliyor.",
     'catalog.unavailable': 'Katalog indirilemedi ve onbellek yok: {0}',

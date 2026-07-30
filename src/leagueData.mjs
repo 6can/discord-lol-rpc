@@ -8,7 +8,7 @@ const CACHE_DIR = path.join(ROOT, '.cache');
 const CACHE_FILE = path.join(CACHE_DIR, 'catalog.json');
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Bumped when the shape of the cached catalog changes, to discard old ones. */
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 const DDRAGON = 'https://ddragon.leagueoflegends.com';
 const GAME_DATA =
@@ -109,10 +109,11 @@ async function downloadCatalog() {
 
   const [champions, skins] = await Promise.all([
     getJson(`${DDRAGON}/cdn/${version}/data/en_US/champion.json`),
-    // Where the square tile art lives. The file names behind it are irregular
-    // enough that guessing them is not an option — a reworked champion keeps
-    // the old name ("XinZhaoRework"), and a recent one sits under Skin0 rather
-    // than Base — so the only reliable source is Riot's own index.
+    // Where the square tile art lives, for every skin as well as the default
+    // one. The file names behind it are irregular enough that guessing them is
+    // not an option — a reworked champion keeps the old name ("XinZhaoRework"),
+    // and a recent one sits under Skin0 rather than Base — so the only reliable
+    // source is Riot's own index.
     getJson(`${GAME_DATA}/v1/skins.json`),
   ]);
 
@@ -123,10 +124,17 @@ async function downloadCatalog() {
     ranks: buildRanks(),
     champions: Object.values(champions.data).map((c) => {
       const key = Number(c.key);
-      // A champion's base skin is its key followed by three zeroes.
+      // A champion's default skin is its key followed by three zeroes.
       const tilePath = skins[String(key * 1000)]?.tilePath;
       return { key, id: c.id, name: c.name, tile: tilePath ? gameAssetUrl(tilePath) : '' };
     }),
+    // Default skins are left out: the champion above already carries that art
+    // under the name people actually use for it.
+    skins: Object.fromEntries(
+      Object.values(skins)
+        .filter((s) => !s.isBase && s.tilePath)
+        .map((s) => [s.id, { name: s.name, tile: gameAssetUrl(s.tilePath) }]),
+    ),
   };
 }
 
@@ -165,7 +173,14 @@ export async function loadCatalog({ force = false } = {}) {
   try {
     const catalog = await downloadCatalog();
     writeCache(catalog);
-    log.ok(m('catalog.updated', catalog.version, catalog.champions.length));
+    log.ok(
+      m(
+        'catalog.updated',
+        catalog.version,
+        catalog.champions.length,
+        Object.keys(catalog.skins).length,
+      ),
+    );
     return new Catalog(catalog);
   } catch (err) {
     if (cached) {
@@ -181,6 +196,9 @@ class Catalog {
     this.raw = data;
     this.version = data.version;
     this.ranksByTier = new Map(data.ranks.map((r) => [r.tier, r]));
+    this.skinsById = new Map(
+      Object.entries(data.skins ?? {}).map(([id, skin]) => [Number(id), skin]),
+    );
 
     // Champions arrive from two directions: the client reports a numeric id,
     // the in-game API reports a display name.
@@ -224,6 +242,16 @@ class Catalog {
       // stands in when a champion is too new to have one indexed yet.
       tile: found.tile || icon,
     };
+  }
+
+  /**
+   * A skin by its absolute id — the champion key followed by the skin number,
+   * so Foxfire Ahri is 103003. Default skins are not in the index, so this is
+   * null for them and the caller falls back to the champion's own art.
+   */
+  skin(id) {
+    const found = this.skinsById.get(Number(id));
+    return found ? { id: Number(id), name: found.name, tile: found.tile } : null;
   }
 
   profileIcon(id) {

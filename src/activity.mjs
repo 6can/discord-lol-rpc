@@ -85,6 +85,20 @@ function kdaText(presence) {
 }
 
 /**
+ * The skin being played, or null when it is the default one.
+ *
+ * The two sources disagree on shape rather than on fact: champion select
+ * reports an absolute id, the scoreboard reports a number against the
+ * champion. Both land on the same entry, so whichever exists is used.
+ */
+function resolveSkin(presence, champion, catalog) {
+  if (!champion) return null;
+  const id =
+    presence.skinNumber > 0 ? champion.key * 1000 + presence.skinNumber : presence.skinId;
+  return catalog.skin(id);
+}
+
+/**
  * The queue by name. The practice tool is checked first because it reports
  * queue 0, which is otherwise the custom game.
  */
@@ -109,6 +123,7 @@ export function buildActivity({ presence, catalog, config, t, startedAt }) {
   // In champion select the id is known; in game the name comes off the
   // scoreboard, which is the only source once champion select is gone.
   const champion = catalog.champion(presence.championName || presence.championId);
+  const skin = resolveSkin(presence, champion, catalog);
   const inMatch = MATCH_PHASES.has(presence.phase);
 
   let details;
@@ -190,8 +205,10 @@ export function buildActivity({ presence, catalog, config, t, startedAt }) {
     largeImage = rank.icon;
     largeText = rank.label;
   } else if (showChampionLarge) {
-    largeImage = champion.tile;
-    largeText = champion.name;
+    // The art follows the skin actually being played; the text line keeps the
+    // champion, which is what a teammate reading the card cares about.
+    largeImage = skin?.tile ?? champion.tile;
+    largeText = skin?.name ?? champion.name;
   } else if (iconUrl) {
     largeImage = iconUrl;
     largeText = t('playing');
@@ -234,4 +251,4 @@ export function buildIdleActivity({ config, t, startedAt }) {
   };
 }
 
-export { clamp, kdaText, queueName };
+export { clamp, kdaText, queueName, resolveSkin };
